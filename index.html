@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Incidencias WhatsApp</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background-color: #0f172a; color: #f8fafc; padding: 20px; min-height: 100vh; }
+        
+        /* Contenedor de Login */
+        #loginView {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 80vh;
+        }
+        .card {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 24px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .form-group { margin-bottom: 16px; }
+        label { display: block; font-size: 0.85rem; color: #94a3b8; margin-bottom: 6px; }
+        input[type="text"], input[type="email"], input[type="password"] {
+            width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #334155;
+            background-color: #0f172a; color: #fff; outline: none;
+        }
+        .btn {
+            background-color: #38bdf8; color: #0f172a; border: none; padding: 10px 16px;
+            border-radius: 6px; font-weight: bold; cursor: pointer; width: 100%;
+        }
+        .btn-secondary { background: transparent; color: #38bdf8; border: 1px solid #38bdf8; margin-top: 10px; }
+        
+        /* Contenedor Principal */
+        #appView { display: none; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .nav { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+        .nav button {
+            background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+            padding: 8px 14px; border-radius: 6px; cursor: pointer;
+        }
+        .nav button.active { background: #38bdf8; color: #0f172a; font-weight: bold; }
+        
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px; }
+        .kpi-card { background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155; }
+        .kpi-val { font-size: 1.8rem; font-weight: bold; color: #38bdf8; }
+        
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }
+        th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #334155; font-size: 0.9rem; }
+        th { background: #0f172a; color: #94a3b8; }
+        tr:hover { background: #334155; cursor: pointer; }
+        
+        .badge { background: rgba(56, 189, 248, 0.2); color: #38bdf8; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; }
+        
+        /* Modal */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center;
+            z-index: 999;
+        }
+        .modal-body { background: #1e293b; padding: 20px; border-radius: 8px; max-width: 500px; width: 90%; }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN -->
+    <div id="loginView">
+        <div class="card">
+            <h2 style="margin-bottom: 6px; text-align: center;">Iniciar Sesión</h2>
+            <p style="font-size: 0.85rem; color: #94a3b8; text-align: center; margin-bottom: 20px;">Dashboard de Incidencias</p>
+            <form id="loginForm" onsubmit="return false;">
+                <div class="form-group">
+                    <label>Correo / Usuario</label>
+                    <input type="text" id="userEmail" placeholder="be.albertoma" required>
+                </div>
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="userPass" placeholder="••••••••" required>
+                </div>
+                <div id="loginError" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 10px; display: none;"></div>
+                <button type="button" class="btn" id="loginBtn" onclick="window.doLogin()">Ingresar</button>
+            </form>
+            <button type="button" class="btn btn-secondary" id="cfgBtn" onclick="window.showConfig()">⚙ Configurar Google Sheets API</button>
+        </div>
+    </div>
+
+    <!-- APP PRINCIPAL -->
+    <div id="appView">
+        <header>
+            <h2>Dashboard WhatsApp</h2>
+            <div>
+                <span id="dispUser" style="margin-right: 10px; font-size: 0.9rem;"></span>
+                <button onclick="window.logout()" style="background: #ef4444; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Salir</button>
+            </div>
+        </header>
+
+        <div class="nav">
+            <button class="tab-b active" onclick="window.tab('dash', event)">Dashboard</button>
+            <button class="tab-b" onclick="window.tab('picos', event)">Análisis de Picos</button>
+            <button class="tab-b" onclick="window.tab('table', event)">Registros</button>
+            <button class="tab-b admin-only" onclick="window.tab('upload', event)">Cargar TXT</button>
+        </div>
+
+        <div id="tab-dash" class="tab-c">
+            <div class="kpi-grid">
+                <div class="kpi-card"><div>Total Mensajes</div><div class="kpi-val" id="k-total">0</div></div>
+                <div class="kpi-card"><div>Incidencias</div><div class="kpi-val" id="k-inc" style="color:#22c55e">0</div></div>
+            </div>
+        </div>
+
+        <div id="tab-picos" class="tab-c" style="display:none;">
+            <div class="kpi-grid">
+                <div class="kpi-card"><div>Hora Pico</div><div class="kpi-val">10:00 AM</div></div>
+                <div class="kpi-card"><div>Día Pico</div><div class="kpi-val" style="color:#22c55e">Martes</div></div>
+            </div>
+        </div>
+
+        <div id="tab-table" class="tab-c" style="display:none;">
+            <table>
+                <thead>
+                    <tr><th>Fecha</th><th>Hora</th><th>Remitente</th><th>Mensaje</th><th>Tags</th></tr>
+                </thead>
+                <tbody id="t-body"></tbody>
+            </table>
+        </div>
+
+        <div id="tab-upload" class="tab-c" style="display:none;">
+            <div class="card" style="max-width:100%; text-align:center; padding:40px; border: 2px dashed #334155;">
+                <p>Haz clic para subir tu archivo .txt de WhatsApp</p>
+                <input type="file" id="fileIn" accept=".txt" style="display:none;" onchange="window.readTxt(this)">
+                <button class="btn" style="width:auto; margin-top:15px;" onclick="document.getElementById('fileIn').click()">Seleccionar Archivo</button>
+                <button class="btn btn-secondary" style="width:auto; margin-top:15px;" onclick="window.loadDemo()">Cargar Datos Demo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DETALLE -->
+    <div class="modal" id="detailModal" onclick="this.style.display='none'">
+        <div class="modal-body" onclick="event.stopPropagation()">
+            <h3 style="margin-bottom:10px;">Detalle del Mensaje</h3>
+            <p><strong>Remitente:</strong> <span id="m-sender"></span></p>
+            <p style="margin-top:10px;"><strong>Mensaje:</strong></p>
+            <div id="m-msg" style="background:#0f172a; padding:10px; border-radius:6px; margin-top:5px;"></div>
+            <button class="btn" style="margin-top:15px;" onclick="document.getElementById('detailModal').style.display='none'">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        // Declaración global explícita para evitar errores de referencias
+        window.apiURL = localStorage.getItem('gas_url') || '';
+        window.dataStore = [];
+
+        window.showConfig = function() {
+            let u = prompt("Ingresa la URL de tu Google Apps Script:", window.apiURL);
+            if (u !== null) {
+                window.apiURL = u.trim();
+                localStorage.setItem('gas_url', window.apiURL);
+                alert("URL guardada correctamente.");
+            }
+        };
+
+        window.doLogin = async function() {
+            const email = document.getElementById('userEmail').value.trim();
+            const pass = document.getElementById('userPass').value.trim();
+            const err = document.getElementById('loginError');
+            const btn = document.getElementById('loginBtn');
+
+            err.style.display = 'none';
+
+            if (!email || !pass) {
+                err.innerText = "Por favor completa usuario y contraseña";
+                err.style.display = "block";
+                return;
+            }
+
+            if (!window.apiURL) {
+                if ((email === 'be.albertoma' || email === 'be.albertoma@gmail.com') && pass === 'Toad0054@@') {
+                    window.loginOk({ name: 'Bryan Alberto', role: 'ADMIN' });
+                } else {
+                    err.innerText = "Configura la URL de Google Sheets API o revisa tus credenciales";
+                    err.style.display = "block";
+                }
+                return;
+            }
+
+            btn.innerText = "Validando...";
+            try {
+                let r = await fetch(window.apiURL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify({ action: 'login', email: email, password: pass })
+                });
+                let res = await r.json();
+                if (res.result === 'success') {
+                    window.loginOk(res.user);
+                } else {
+                    err.innerText = res.message || "Error al iniciar sesión";
+                    err.style.display = "block";
+                }
+            } catch(ex) {
+                err.innerText = "Error de conexión con Google Sheets";
+                err.style.display = "block";
+            } finally {
+                btn.innerText = "Ingresar";
+            }
+        };
+
+        window.loginOk = function(user) {
+            document.getElementById('loginView').style.display = 'none';
+            document.getElementById('appView').style.display = 'block';
+            document.getElementById('dispUser').innerText = `${user.name} (${user.role})`;
+            
+            if (user.role !== 'ADMIN') {
+                document.querySelectorAll('.admin-only').forEach(e => e.style.display = 'none');
+            }
+            window.loadDemo();
+        };
+
+        window.logout = function() {
+            document.getElementById('appView').style.display = 'none';
+            document.getElementById('loginView').style.display = 'flex';
+        };
+
+        window.tab = function(name, evt) {
+            document.querySelectorAll('.tab-c').forEach(e => e.style.display = 'none');
+            document.querySelectorAll('.tab-b').forEach(e => e.classList.remove('active'));
+            document.getElementById('tab-' + name).style.display = 'block';
+            if (evt && evt.target) evt.target.classList.add('active');
+        };
+
+        window.loadDemo = function() {
+            window.dataStore = [
+                { date: '27/10/2026', time: '09:15', sender: 'Juan Perez', msg: '#SOPORTE Caida de sistema', tags: ['#SOPORTE'] },
+                { date: '27/10/2026', time: '10:30', sender: 'Maria Gomez', msg: 'LL Atencion realizada por llamada', tags: ['LL'] }
+            ];
+            window.render();
+        };
+
+        window.readTxt = function(input) {
+            let file = input.files[0];
+            if (!file) return;
+            let reader = new FileReader();
+            reader.onload = function(e) {
+                let lines = e.target.result.split('\n');
+                window.dataStore = [];
+                lines.forEach(l => {
+                    if (l.includes(':')) {
+                        window.dataStore.push({ date: 'Hoy', time: '12:00', sender: 'Usuario', msg: l, tags: ['#INCIDENCIA'] });
+                    }
+                });
+                window.render();
+                window.tab('table');
+            };
+            reader.readAsText(file);
+        };
+
+        window.render = function() {
+            document.getElementById('k-total').innerText = window.dataStore.length;
+            document.getElementById('k-inc').innerText = window.dataStore.length;
+            let html = '';
+            window.dataStore.forEach((d, i) => {
+                html += `<tr onclick="window.openM(${i})">
+                    <td>${d.date}</td><td>${d.time}</td><td>${d.sender}</td><td>${d.msg}</td>
+                    <td><span class="badge">${d.tags.join(', ')}</span></td>
+                </tr>`;
+            });
+            document.getElementById('t-body').innerHTML = html;
+        };
+
+        window.openM = function(i) {
+            let d = window.dataStore[i];
+            document.getElementById('m-sender').innerText = d.sender;
+            document.getElementById('m-msg').innerText = d.msg;
+            document.getElementById('detailModal').style.display = 'flex';
+        };
+    </script>
+</body>
+</html>
